@@ -127,6 +127,29 @@ return [
     | The catalog itself lives in `config/authz.php` (the service owns it).
     | `php artisan dxs:sync-authz` PUTs it to the platform authz endpoint.
     */
+    /*
+     * How the package consumes the catalog LOCALLY (the catalog itself stays
+     * in config/authz.php — the service owns it).
+     *
+     * `define_abilities`: register a Gate ability for every declared slug,
+     * answered from the local permission tables. Turn it off only when the app
+     * defines every catalog slug itself; with it off and no app definition, a
+     * slug the platform cannot resolve has no answer at all.
+     *
+     * `tables`: the consumer owns the schema (the package only publishes the
+     * Omnify sources), so every table name the seeder and the local resolver
+     * touch is configurable rather than assumed.
+     */
+    'authz' => [
+        'define_abilities' => (bool) env('SSO_AUTHZ_DEFINE_ABILITIES', true),
+        'tables' => [
+            'permissions' => env('SSO_AUTHZ_TABLE_PERMISSIONS', 'permissions'),
+            'roles' => env('SSO_AUTHZ_TABLE_ROLES', 'roles'),
+            'role_permissions' => env('SSO_AUTHZ_TABLE_ROLE_PERMISSIONS', 'role_permissions'),
+            'role_user' => env('SSO_AUTHZ_TABLE_ROLE_USER', 'role_user_pivots'),
+        ],
+    ],
+
     'service_id' => env('SSO_SERVICE_ID', ''),                            // {service} for the authz route
     'admin_token' => env('SSO_ADMIN_TOKEN', ''),                          // bearer w/ catalog.authz.manage
     'authz_path' => env('SSO_AUTHZ_PATH', 'api/admin/catalog/{service}/authz'),

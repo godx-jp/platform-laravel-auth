@@ -40,6 +40,7 @@ final class InstallCommand extends Command
         $this->line('  2. php artisan migrate');
         $this->line('  3. Point unauthenticated users at /auth/redirect (a named `login` redirect is registered for you unless your app already defines one).');
         $this->line('  4. Declare your catalog in config/authz.php and run `php artisan dxs:sync-authz --dry-run`.');
+        $this->line('  5. php artisan dxs:seed-authz  (writes the same catalog into the local permission tables)');
         $this->line('  See docs/onboarding.md in the package for the full walkthrough.');
 
         return self::SUCCESS;

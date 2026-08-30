@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Dxs\Auth\Console;
 
+use Dxs\Auth\Authorization\PermissionCatalog;
 use Dxs\Auth\Exceptions\SsoException;
 use Dxs\Auth\Support\SsoCache;
 use Illuminate\Console\Command;
@@ -29,12 +30,10 @@ final class SyncAuthzCommand extends Command
 
     public function handle(): int
     {
+        // Payload là danh mục THÔ, không chuẩn hoá: hợp đồng với Platform là
+        // thứ service khai, không phải thứ package suy diễn hộ.
         /** @var array<string, mixed> $catalog */
-        $catalog = [
-            'permissions' => config('authz.permissions') ?? [],
-            'roles' => config('authz.roles') ?? [],
-            'default_role' => config('authz.default_role'),
-        ];
+        $catalog = PermissionCatalog::rawCatalog();
 
         $count = is_countable($catalog['permissions']) ? count($catalog['permissions']) : 0;
 
@@ -44,7 +43,7 @@ final class SyncAuthzCommand extends Command
             return self::SUCCESS;
         }
 
-        $validationError = $this->validationError($catalog);
+        $validationError = PermissionCatalog::validationError($catalog);
         if ($validationError !== null) {
             $this->error($validationError);
 
@@ -99,64 +98,5 @@ final class SyncAuthzCommand extends Command
         $this->info("Permission catalog synced ({$count} codes).");
 
         return self::SUCCESS;
-    }
-
-    /** @param array<string, mixed> $catalog */
-    private function validationError(array $catalog): ?string
-    {
-        $permissions = $catalog['permissions'] ?? null;
-        if (! is_array($permissions)) {
-            return 'Permission catalog must contain a permissions array.';
-        }
-
-        $slugs = [];
-        foreach ($permissions as $index => $permission) {
-            $slug = is_array($permission) ? ($permission['slug'] ?? null) : null;
-            if (! is_string($slug) || trim($slug) === '') {
-                return "Permission at index {$index} must have a non-empty string slug.";
-            }
-
-            if (preg_match('/^[a-z0-9][a-z0-9._-]*$/', $slug) !== 1) {
-                return "Permission slug [{$slug}] has an invalid format.";
-            }
-
-            if (isset($slugs[$slug])) {
-                return "Permission slug [{$slug}] is duplicated.";
-            }
-
-            $slugs[$slug] = true;
-        }
-
-        $roles = $catalog['roles'] ?? [];
-        if (! is_array($roles)) {
-            return 'Permission catalog roles must be an array.';
-        }
-
-        $roleNames = [];
-        foreach ($roles as $index => $role) {
-            $roleName = is_array($role) ? ($role['role'] ?? null) : null;
-            $rolePermissions = is_array($role) ? ($role['permissions'] ?? null) : null;
-            if (! is_string($roleName) || trim($roleName) === '' || ! is_array($rolePermissions)) {
-                return "Role at index {$index} must contain a role name and permissions array.";
-            }
-
-            if (isset($roleNames[$roleName])) {
-                return "Role [{$roleName}] is duplicated.";
-            }
-            $roleNames[$roleName] = true;
-
-            foreach ($rolePermissions as $permissionSlug) {
-                if (! is_string($permissionSlug) || ! isset($slugs[$permissionSlug])) {
-                    return "Role at index {$index} references an unknown permission.";
-                }
-            }
-        }
-
-        $defaultRole = $catalog['default_role'] ?? null;
-        if ($defaultRole !== null && (! is_string($defaultRole) || ! isset($roleNames[$defaultRole]))) {
-            return 'Default role must reference a declared role.';
-        }
-
-        return null;
     }
 }

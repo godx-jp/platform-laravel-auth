@@ -66,6 +66,19 @@ Abilities are answered by the platform-resolved permission list; local
 `Gate::define()` still runs for abilities outside it. Plain `sso.auth` +
 Laravel's `can:` keeps working if you prefer wiring them separately.
 
+Since 1.0.0 `Gate::before` returns **`null`** — not `false` — when it cannot
+resolve an ability (no `console_access_token`/`console_organization_id` on the
+user). "I don't know" is no longer allowed to become "no": the check falls
+through to `Gate::define()` and your policies. A denial the platform actually
+issued still short-circuits, and so does a non-authoritative read model (an
+outage must not silently *open* an ability). See `UPGRADING.md`.
+
+The package also defines a Gate ability for every slug in `config/authz.php`,
+answered from the local `permissions` / `role_permissions` / `role_user_pivots`
+tables, so the fall-through has somewhere to land. Your own `Gate::define()`
+for the same slug wins (app providers boot after the package). Switch the whole
+thing off with `SSO_AUTHZ_DEFINE_ABILITIES=false`.
+
 > **New to the platform?** Follow the step-by-step [downstream onboarding guide](docs/onboarding.md) —
 > it covers service registration, every env value, the users-table migration, and a
 > symptom→cause debugging map collected from a real integration.
@@ -143,8 +156,10 @@ provided.
 | `POST {prefix}/logout`   | Clear the session cookie |
 | `POST {prefix}/backchannel-logout` | Validate an OIDC logout token and revoke its local session lineage |
 | `sso.auth` middleware    | Validate a platform-issued bearer (JWKS/`aud`/`exp`) and resolve the local user |
-| `Gate::before`           | Grant an ability iff it is in the platform-resolved permission list |
-| `dxs:sync-authz` | Push this service's declared authorization catalog from `config/authz.php` to the platform |
+| `Gate::before`           | Grant an ability iff it is in the platform-resolved permission list; `null` (fall through) when it cannot be resolved |
+| `Gate::define`           | One ability per declared slug, answered from the local permission tables (`SSO_AUTHZ_DEFINE_ABILITIES=false` to opt out) |
+| `dxs:sync-authz` | Push this service's declared authorization catalog from `config/authz.php` UP to the platform |
+| `dxs:seed-authz` | Write that same catalog DOWN into the local permission tables (`--dry-run` to preview) |
 
 ## Independence
 

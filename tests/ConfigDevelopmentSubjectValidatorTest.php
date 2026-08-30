@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Dxs\Auth\Tests;
 
-use Dxs\Auth\Support\ConfigDevelopmentSubjectValidator;
 use Dxs\Auth\SsoClientServiceProvider;
+use Dxs\Auth\Support\ConfigDevelopmentSubjectValidator;
 use Orchestra\Testbench\TestCase;
 
 final class ConfigDevelopmentSubjectValidatorTest extends TestCase

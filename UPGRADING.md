@@ -33,6 +33,15 @@ Trước: ability nằm trong `config('authz.permissions')` mà request không m
 
 Sau: trả **`null`** ⇒ rơi xuống `Gate::define` / Policy của app.
 
+**Ranh giới hẹp hơn tiêu đề nghe có vẻ** — `null` chỉ thay `false` ở đúng chỗ
+gói KHÔNG BIẾT. Hai chỗ dưới đây vẫn `false`, cố ý:
+
+| tình huống | trả | vì sao |
+|---|---|---|
+| thiếu `console_access_token` / `console_organization_id` | **`null`** | ta không biết, và "không biết" ≠ "không" |
+| Platform trả lời authoritative, slug không có trong danh sách | `false` | nguồn sự thật đã nói KHÔNG; policy cục bộ không được lật |
+| read model **không** authoritative (Platform không với tới) | `false` | fail-closed. Trả `null` ở đây sẽ để một sự cố mạng âm thầm **MỞ** mọi ability có một policy cục bộ dễ tính — đúng thứ fail-closed sinh ra để chặn |
+
 App nào đang **dựa vào** hành vi deny đó phải khai lại tường minh. Cách kiểm trước khi nâng cấp:
 
 ```sh
@@ -46,7 +55,35 @@ Không có kết quả ⇒ nâng cấp không đổi hành vi gì.
 
 `Gate::define` cho mọi slug trong catalog, và seed `permissions` + gán vào role.
 
+**Định nghĩa Gate là vế BẮT BUỘC đi kèm mục 2.** Không có nó thì "trả `null`"
+chỉ đổi một deny im lặng thành một deny im lặng khác: trước 1.0.0 consumer nào
+quên `Gate::define` thì `Gate::before` là câu trả lời DUY NHẤT, nên "không phân
+giải được" bắt buộc phải là `false`. Định nghĩa của gói đọc **bảng cục bộ**
+(`permissions` ↔ `role_permissions` ↔ `role_user_pivots`) — đúng thứ seeder ghi
+— nên câu trả lời có chỗ để rơi xuống. Tắt bằng `SSO_AUTHZ_DEFINE_ABILITIES=false`;
+`Gate::define` của app cho cùng một slug vẫn thắng (provider của app boot sau gói).
+
+Tên bốn bảng đó cấu hình được ở `sso.authz.tables` — consumer sở hữu schema, gói
+chỉ publish nguồn Omnify. Thiếu bảng ⇒ **từ chối**, không ném exception: một
+lượt kiểm quyền không được phép làm đổ cả trang.
+
 **Seeding chỉ chạm slug VỪA SINH.** Bảng `role_permission` là dữ liệu **tổ chức sửa được** ở nhiều consumer; tái áp một giá trị là âm thầm cướp lựa chọn của họ. Guard là `wasRecentlyCreated` trên chính hàng `permissions`, không phải `sync()`.
+
+Seed chạy bằng **`php artisan dxs:seed-authz`** (`--dry-run` để xem trước), hoặc
+gọi `Dxs\Auth\Database\Seeders\AuthzCatalogSeeder` từ `DatabaseSeeder` của bạn.
+Cố ý KHÔNG chạy lúc provider boot: seed là một lượt GHI vào DB, và ghi vào DB
+phải là hành động có người gọi tên, không phải tác dụng phụ của mỗi request.
+
+**Guard có HAI vế, không phải một** — và vế thứ hai không có trong bản hứa đầu
+tiên của tài liệu này:
+
+- permission `wasRecentlyCreated` — slug mới toanh, tổ chức chưa từng thấy nó.
+- **hoặc** vai `wasRecentlyCreated` — vai mới toanh cũng chưa có lịch sử để cướp.
+
+Thiếu vế thứ hai thì một vai mới thêm vào catalog sẽ ra đời **RỖNG** khi mọi
+slug của nó đã tồn tại từ trước, và không có gì báo. Cả hai vế đều là "hàng này
+vừa sinh ra"; không vế nào chạm một cặp đã tồn tại, và seeder **không bao giờ
+XOÁ** một cặp nào — gỡ quyền vẫn là việc của tổ chức.
 
 ## Không backport
 

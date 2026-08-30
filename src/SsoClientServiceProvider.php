@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Dxs\Auth;
 
+use Dxs\Auth\Authorization\LocalAbilityResolver;
+use Dxs\Auth\Authorization\PermissionCatalog;
 use Dxs\Auth\Console\InstallCommand;
+use Dxs\Auth\Console\SeedAuthzCommand;
 use Dxs\Auth\Console\SyncAuthzCommand;
 use Dxs\Auth\Contracts\ProvisionsUsers;
 use Dxs\Auth\Contracts\ValidatesDevelopmentSubjects;
@@ -19,11 +22,11 @@ use Dxs\Auth\Services\PlatformContextClient;
 use Dxs\Auth\Services\TokenExchanger;
 use Dxs\Auth\Services\TokenRefresher;
 use Dxs\Auth\Support\ConfigDevelopmentSubjectValidator;
+use Dxs\Auth\Sync\AuthzResources;
+use Godx\Sync\Registry\SyncRegistry;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\Request;
-use Dxs\Auth\Sync\AuthzResources;
-use Godx\Sync\Registry\SyncRegistry;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -44,6 +47,7 @@ final class SsoClientServiceProvider extends ServiceProvider
         $this->app->singleton(TokenRefresher::class);
         $this->app->singleton(PermissionClient::class);
         $this->app->singleton(PlatformContextClient::class);
+        $this->app->singleton(LocalAbilityResolver::class);
         $this->app->singleton(SsoManager::class);
     }
 
@@ -82,7 +86,7 @@ final class SsoClientServiceProvider extends ServiceProvider
         ], 'sso-provisioner');
 
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncAuthzCommand::class, InstallCommand::class]);
+            $this->commands([SyncAuthzCommand::class, SeedAuthzCommand::class, InstallCommand::class]);
         }
 
         // Opt-in scheduled catalog sync: `sso.sync.authz.auto` puts
@@ -115,30 +119,50 @@ final class SsoClientServiceProvider extends ServiceProvider
         // `insufficient_scope` semantics on denial.
         $router->aliasMiddleware('sso.can', AuthorizeSsoPermission::class);
 
+        // Package tự nạp danh mục vào Gate (1.0.0). Trước đây consumer phải tự
+        // `Gate::define` cho từng slug, và khi họ quên thì `Gate::before` là
+        // câu trả lời DUY NHẤT — nên "không phân giải được" chỉ có thể là
+        // `false`. Có định nghĩa ở đây thì null mới có chỗ để rơi xuống.
+        //
+        // Định nghĩa của package đọc BẢNG CỤC BỘ, tức đúng thứ
+        // `dxs:seed-authz` ghi. Consumer định nghĩa lại slug nào thì thắng slug
+        // đó: provider của app boot SAU package, và `Gate::define` sau đè trước.
+        if ((bool) config('sso.authz.define_abilities', true)) {
+            foreach (PermissionCatalog::slugs() as $slug) {
+                Gate::define($slug, fn (Authenticatable $user): bool => $this->app
+                    ->make(LocalAbilityResolver::class)
+                    ->allows($user, $slug));
+            }
+        }
+
         // Authorization DECISIONS stay on the platform: a granted ability is one
         // present in the user's platform-resolved permission list. Explicit
         // policies still run for abilities not in the list (Gate::before → null).
         if ((bool) config('sso.permissions.gate_enabled', true)) {
             Gate::before(function (Authenticatable $user, string $ability): ?bool {
-                $platformAbilities = collect((array) config('authz.permissions'))
-                    ->pluck('slug')
-                    ->filter(fn (mixed $slug): bool => is_string($slug) && $slug !== '');
-
-                if (! $platformAbilities->contains($ability)) {
+                if (! in_array($ability, PermissionCatalog::slugs(), true)) {
                     return null;
                 }
 
                 $token = data_get($user, 'console_access_token');
                 $org = data_get($user, 'console_organization_id');
 
+                // KHÔNG có ngữ cảnh Platform ⇒ không phân giải được ⇒ `null`,
+                // KHÔNG phải `false` (thay đổi phá vỡ của 1.0.0).
+                //
+                // `false` ở đây đoản mạch toàn bộ Gate: mọi `Gate::define` và
+                // mọi Policy của app bị bỏ qua, nên một request không mang
+                // `console_access_token` bị từ chối mọi ability trong danh mục,
+                // kể cả của org-admin, và không một dòng log. Một câu "tôi
+                // không biết" không được phép trở thành câu "không".
                 if (! is_string($token) || $token === '' || ! is_string($org) || $org === '') {
-                    return false;
+                    return null;
                 }
 
                 $this->app->make(TokenRefresher::class)->ensureFresh($user);
                 $token = data_get($user, 'console_access_token');
                 if (! is_string($token) || $token === '') {
-                    return false;
+                    return null;
                 }
 
                 $branch = data_get($user, 'console_branch_id');
@@ -147,6 +171,17 @@ final class SsoClientServiceProvider extends ServiceProvider
                 $decision = $this->app->make(PermissionClient::class)
                     ->resolveFor($token, $org, $branch);
 
+                // Từ đây trở xuống Platform ĐÃ trả lời, nên `false` là câu trả
+                // lời của nó chứ không phải sự im lặng của ta:
+                //
+                // - `authoritative === false` là read model đang suy giảm
+                //   (PermissionClient fail-closed khi Platform không với tới).
+                //   Trả null ở đây sẽ để một sự cố mạng âm thầm MỞ mọi ability
+                //   có một policy cục bộ dễ tính — đúng thứ fail-closed sinh ra
+                //   để chặn.
+                // - authoritative mà slug không có trong danh sách nghĩa là
+                //   Platform nói KHÔNG. Nguồn sự thật đã phát biểu; một policy
+                //   cục bộ không được phép lật nó.
                 return $decision['authoritative'] && $decision['permissions']->contains($ability);
             });
         }
