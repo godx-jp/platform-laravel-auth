@@ -1,5 +1,5 @@
 {
-    "name": "dxs/laravel-auth",
+    "name": "godx-jp/platform-laravel-auth",
     "description": "OAuth2/OIDC downstream SSO client for GoDX platform services (Authorization Code + PKCE, JWKS-verified bearer resource auth).",
     "type": "library",
     "license": "proprietary",
