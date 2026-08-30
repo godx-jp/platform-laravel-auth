@@ -22,6 +22,8 @@ use Dxs\Auth\Support\ConfigDevelopmentSubjectValidator;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\Request;
+use Dxs\Auth\Sync\AuthzResources;
+use Godx\Sync\Registry\SyncRegistry;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -47,6 +49,12 @@ final class SsoClientServiceProvider extends ServiceProvider
 
     public function boot(Router $router): void
     {
+        // Từ vựng authz khai vào đường ống đồng bộ chung. Khai ở `boot` chứ
+        // không `register`: registry của package sync là singleton dựng trong
+        // `register` của nó, và thứ tự nạp provider giữa hai package không được
+        // phép quyết định loại nào tồn tại.
+        AuthzResources::register($this->app->make(SyncRegistry::class));
+
         $this->publishes([
             __DIR__.'/../config/sso.php' => config_path('sso.php'),
             __DIR__.'/../config/authz.php' => config_path('authz.php'),
