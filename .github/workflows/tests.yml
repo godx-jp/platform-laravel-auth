@@ -7,19 +7,46 @@ on:
 permissions:
   contents: read
 
+# RUNNER — `[self-hosted, swarm-pool]` cho mọi job, không phải `ubuntu-latest`:
+# runner của GitHub tính tiền, đàn swarm-pool thì không. Runner là container
+# phù du (image `tempo-runner-php:noble`, Ubuntu 24.04): mỗi job một container
+# mới, PHP 8.4 + Composer + Node 22 + Chromium của Playwright nằm sẵn trong image.
+#
+# KHÔNG dùng `setup-php` / `setup-node`, và KHÔNG cài gì cả. Đo ở godx-chat trên
+# chính đàn này: `setup-php` 81s dù PHP đã có sẵn (nó không nhận bản cài sẵn là
+# "của nó"), `setup-node` 123s để tải một thứ không đổi giữa hai lượt. Khẳng
+# định, đừng cài — image trôi mất thứ gì thì job đỏ NGAY tại bước khẳng định với
+# một câu nói rõ nguyên nhân, thay vì đỏ rải rác ở test.
 jobs:
   test:
     name: PHP 8.4
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, swarm-pool]
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          coverage: none
-          tools: composer:v2
+      # `openssl` vì composer.json đòi `ext-openssl`; `pdo_sqlite` cho testbench;
+      # `mbstring` cho mọi chuỗi tiếng Việt/Nhật.
+      - name: Khẳng định toolchain PHP của image
+        run: |
+          php -v | head -1
+          php -r 'exit(version_compare(PHP_VERSION, "8.4.0", ">=") ? 0 : 1);' \
+            || { echo "::error::image runner cần PHP >= 8.4"; exit 1; }
+          for ext in openssl mbstring pdo_sqlite; do
+            php -m | grep -qx "$ext" \
+              || { echo "::error::image runner thiếu extension '$ext' — xem chú thích ở đầu workflow"; exit 1; }
+          done
+          composer --version
+
+      # `$HOME` trên runner dùng chung không thuộc về CI. Trỏ COMPOSER_HOME vào
+      # thư mục tạm của lượt chạy, và mồi kho tải đã bake sẵn trong image —
+      # container phù du nên `vendor/` phải dựng lại mỗi job.
+      - name: Composer không đọc HOME dùng chung
+        run: |
+          echo "COMPOSER_HOME=$RUNNER_TEMP/composer-home" >> "$GITHUB_ENV"
+          mkdir -p "$GITHUB_WORKSPACE/.composer-cache"
+          [ -d /opt/composer-cache ] && cp -a /opt/composer-cache/. "$GITHUB_WORKSPACE/.composer-cache/" 2>/dev/null || true
+          echo "COMPOSER_CACHE_DIR=$GITHUB_WORKSPACE/.composer-cache" >> "$GITHUB_ENV"
 
       - run: composer validate --strict
       - run: composer install --no-interaction --prefer-dist --no-progress
@@ -27,20 +54,51 @@ jobs:
 
   browser-e2e:
     name: Two-consumer browser E2E
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, swarm-pool]
+
+    env:
+      # Chromium của Playwright nằm sẵn trong image ở `/opt/ms-playwright`
+      # (bake theo playwright 1.62.1). `run.sh` vẫn gọi `playwright install
+      # chromium` như cũ: khớp bản thì bước ấy chỉ kiểm-và-thoát (0,5s); lệch
+      # bản (tests/e2e đang khoá 1.61.1) thì nó tải bản thiếu vào cùng thư mục
+      # — job chạy bằng root nên ghi được. KHÔNG trỏ về `~/.cache` mặc định:
+      # `$HOME` trên runner dùng chung không thuộc về CI.
+      PLAYWRIGHT_BROWSERS_PATH: /opt/ms-playwright
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          coverage: none
-          tools: composer:v2
+      # `run.sh` dùng `zip` và `shasum` ngoài PHP/Composer — đã dò image gốc
+      # (myoung34/github-runner:ubuntu-noble) có cả hai; khẳng định để lỡ image
+      # đổi thì đỏ ở đây chứ không đỏ giữa chừng script.
+      - name: Khẳng định toolchain PHP của image
+        run: |
+          php -v | head -1
+          php -r 'exit(version_compare(PHP_VERSION, "8.4.0", ">=") ? 0 : 1);' \
+            || { echo "::error::image runner cần PHP >= 8.4"; exit 1; }
+          for ext in openssl mbstring pdo_sqlite; do
+            php -m | grep -qx "$ext" \
+              || { echo "::error::image runner thiếu extension '$ext' — xem chú thích ở đầu workflow"; exit 1; }
+          done
+          composer --version
+          for cmd in zip shasum; do
+            command -v "$cmd" >/dev/null \
+              || { echo "::error::image runner thiếu lệnh '$cmd' — tests/e2e/run.sh cần nó"; exit 1; }
+          done
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
+      - name: Khẳng định toolchain Node của image
+        run: |
+          node --version | grep '^v22\.' >/dev/null \
+            || { echo "::error::image runner cần Node 22"; exit 1; }
+          npm --version
+
+      - name: Composer và npm không đọc HOME dùng chung
+        run: |
+          echo "COMPOSER_HOME=$RUNNER_TEMP/composer-home" >> "$GITHUB_ENV"
+          mkdir -p "$GITHUB_WORKSPACE/.composer-cache"
+          [ -d /opt/composer-cache ] && cp -a /opt/composer-cache/. "$GITHUB_WORKSPACE/.composer-cache/" 2>/dev/null || true
+          echo "COMPOSER_CACHE_DIR=$GITHUB_WORKSPACE/.composer-cache" >> "$GITHUB_ENV"
+          echo "npm_config_cache=$RUNNER_TEMP/npm-cache" >> "$GITHUB_ENV"
 
       - run: ./tests/e2e/run.sh
 
