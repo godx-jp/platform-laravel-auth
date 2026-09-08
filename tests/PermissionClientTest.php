@@ -86,4 +86,62 @@ final class PermissionClientTest extends TestCase
 
         $this->app->make(PermissionClient::class)->fetch('token', 'wrong-org');
     }
+
+    public function test_live_checks_ignore_cached_permissions_and_observe_revocation_on_the_next_call(): void
+    {
+        Http::fakeSequence()
+            ->push(['permissions' => ['records.write'], 'roles' => [], 'authoritative' => true])
+            ->push(['permissions' => ['records.read'], 'roles' => [], 'authoritative' => true])
+            ->push(['permissions' => [], 'roles' => [], 'authoritative' => true]);
+
+        $client = $this->app->make(PermissionClient::class);
+        $this->assertSame(['records.write'], $client->fetch('live-token', 'org-a')['permissions']);
+        $this->assertSame(['records.read'], $client->fetchFresh('live-token', 'org-a')['permissions']);
+        $this->assertSame([], $client->fetchFresh('live-token', 'org-a')['permissions']);
+        Http::assertSentCount(3);
+    }
+
+    public function test_live_permission_resolution_never_falls_back_to_a_cached_allow_during_an_outage(): void
+    {
+        Http::fakeSequence()
+            ->push(['permissions' => ['records.write'], 'roles' => [], 'authoritative' => true])
+            ->push(['error' => 'unavailable'], 503);
+
+        $client = $this->app->make(PermissionClient::class);
+        $client->fetch('live-token', 'org-a');
+        $decision = $client->resolveFor('live-token', 'org-a', fresh: true);
+
+        $this->assertFalse($decision['authoritative']);
+        $this->assertTrue($decision['permissions']->isEmpty());
+        Http::assertSentCount(2);
+    }
+
+    public function test_live_permission_resolution_keeps_each_request_token_and_context_separate(): void
+    {
+        Http::fake(fn (Request $request) => Http::response([
+            'permissions' => [$request['organization_id'].'.read'],
+            'roles' => [],
+            'authoritative' => true,
+        ]));
+        $client = $this->app->make(PermissionClient::class);
+
+        $this->assertSame(['org-a.read'], $client->fetchFresh('token-a', 'org-a', 'branch-a')['permissions']);
+        $this->assertSame(['org-b.read'], $client->fetchFresh('token-b', 'org-b', 'branch-b')['permissions']);
+        $this->assertSame(['org-a.read'], $client->fetchFresh('token-a', 'org-a', 'branch-a')['permissions']);
+        Http::assertSent(fn (Request $request): bool => $request->hasHeader('Authorization', 'Bearer token-b')
+            && $request['organization_id'] === 'org-b' && $request['branch_id'] === 'branch-b');
+        Http::assertSentCount(3);
+    }
+
+    public function test_permission_redirect_is_not_an_authorization_decision(): void
+    {
+        Http::fake(['*' => Http::response([
+            'permissions' => ['records.write'], 'roles' => [], 'authoritative' => true,
+        ], 302, ['Location' => 'https://untrusted.example/'])]);
+
+        $decision = $this->app->make(PermissionClient::class)->resolveFor('token', 'org-a', fresh: true);
+        $this->assertFalse($decision['authoritative']);
+        $this->assertTrue($decision['permissions']->isEmpty());
+        Http::assertSentCount(1);
+    }
 }

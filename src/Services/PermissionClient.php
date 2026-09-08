@@ -35,57 +35,72 @@ final class PermissionClient
         $key = SsoCache::key('perms:'.$tokenHash.':'.sha1($organizationId.'|'.((string) $branchId)));
         $this->indexKey($tokenHash, $key);
 
-        return SsoCache::store()->remember($key, (int) config('sso.permissions_ttl', 300), function () use ($accessToken, $organizationId, $branchId): array {
-            $url = rtrim((string) config('sso.issuer'), '/').'/'.ltrim((string) config('sso.permissions_path', 'api/sso/me/permissions'), '/');
+        return SsoCache::store()->remember(
+            $key,
+            (int) config('sso.permissions_ttl', 300),
+            fn (): array => $this->fetchFresh($accessToken, $organizationId, $branchId),
+        );
+    }
 
-            try {
-                $response = Http::withToken($accessToken)
-                    ->timeout((int) config('sso.http_timeout'))
-                    ->connectTimeout(min(3, (int) config('sso.http_timeout')))
-                    ->acceptJson()
-                    ->get($url, array_filter([
-                        'organization_id' => $organizationId,
-                        'branch_id' => $branchId,
-                    ]));
-            } catch (ConnectionException $exception) {
-                throw new SsoException('Permission service is temporarily unreachable.', previous: $exception);
-            }
+    /**
+     * Query the authority for this call without reading or writing a positive
+     * cache. Use at admission and immediately before each business effect.
+     * An unavailable authority throws; never substitute an earlier decision.
+     *
+     * @return array{permissions: list<string>, roles: list<mixed>, service_access: array<string, mixed>, contract_version: ?string, evaluated_at: ?string, authoritative: bool}
+     */
+    public function fetchFresh(string $accessToken, string $organizationId, ?string $branchId = null): array
+    {
+        $url = rtrim((string) config('sso.issuer'), '/').'/'.ltrim((string) config('sso.permissions_path', 'api/sso/me/permissions'), '/');
 
-            if ($response->failed()) {
-                throw new SsoException("Permission fetch failed ({$response->status()}) from {$url}.");
-            }
+        try {
+            $response = Http::withToken($accessToken)
+                ->withoutRedirecting()
+                ->timeout((int) config('sso.http_timeout'))
+                ->connectTimeout(min(3, (int) config('sso.http_timeout')))
+                ->acceptJson()
+                ->get($url, array_filter([
+                    'organization_id' => $organizationId,
+                    'branch_id' => $branchId,
+                ]));
+        } catch (ConnectionException $exception) {
+            throw new SsoException('Permission service is temporarily unreachable.', previous: $exception);
+        }
 
-            $data = $response->json();
-            if (! is_array($data)) {
-                throw new SsoException('Permission service returned a malformed response.');
-            }
+        if (! $response->successful()) {
+            throw new SsoException("Permission fetch failed ({$response->status()}) from {$url}.");
+        }
 
-            $permissions = $data['permissions'] ?? null;
-            $roles = $data['roles'] ?? null;
-            $authoritative = $data['authoritative'] ?? null;
+        $data = $response->json();
+        if (! is_array($data)) {
+            throw new SsoException('Permission service returned a malformed response.');
+        }
 
-            if (! is_array($permissions)
-                || ! array_is_list($permissions)
-                || collect($permissions)->contains(fn (mixed $permission): bool => ! is_string($permission) || $permission === '')
-                || ! is_array($roles)
-                || ! array_is_list($roles)
-                || collect($roles)->contains(fn (mixed $role): bool => ! $this->isValidRole($role))
-                || ! is_bool($authoritative)
-                || (isset($data['service_access']) && ! is_array($data['service_access']))
-                || (isset($data['contract_version']) && ! is_string($data['contract_version']))
-                || (isset($data['evaluated_at']) && ! is_string($data['evaluated_at']))) {
-                throw new SsoException('Permission service returned a malformed response.');
-            }
+        $permissions = $data['permissions'] ?? null;
+        $roles = $data['roles'] ?? null;
+        $authoritative = $data['authoritative'] ?? null;
 
-            return [
-                'permissions' => $permissions,
-                'roles' => $roles,
-                'service_access' => is_array($data['service_access'] ?? null) ? $data['service_access'] : [],
-                'contract_version' => is_string($data['contract_version'] ?? null) ? $data['contract_version'] : null,
-                'evaluated_at' => is_string($data['evaluated_at'] ?? null) ? $data['evaluated_at'] : null,
-                'authoritative' => $authoritative,
-            ];
-        });
+        if (! is_array($permissions)
+            || ! array_is_list($permissions)
+            || collect($permissions)->contains(fn (mixed $permission): bool => ! is_string($permission) || $permission === '')
+            || ! is_array($roles)
+            || ! array_is_list($roles)
+            || collect($roles)->contains(fn (mixed $role): bool => ! $this->isValidRole($role))
+            || ! is_bool($authoritative)
+            || (isset($data['service_access']) && ! is_array($data['service_access']))
+            || (isset($data['contract_version']) && ! is_string($data['contract_version']))
+            || (isset($data['evaluated_at']) && ! is_string($data['evaluated_at']))) {
+            throw new SsoException('Permission service returned a malformed response.');
+        }
+
+        return [
+            'permissions' => $permissions,
+            'roles' => $roles,
+            'service_access' => is_array($data['service_access'] ?? null) ? $data['service_access'] : [],
+            'contract_version' => is_string($data['contract_version'] ?? null) ? $data['contract_version'] : null,
+            'evaluated_at' => is_string($data['evaluated_at'] ?? null) ? $data['evaluated_at'] : null,
+            'authoritative' => $authoritative,
+        ];
     }
 
     private function isValidRole(mixed $role): bool
@@ -152,10 +167,12 @@ final class PermissionClient
      *
      * @return array{permissions: Collection<int, string>, roles: list<mixed>, service_access: array<string, mixed>, contract_version: ?string, evaluated_at: ?string, authoritative: bool}
      */
-    public function resolveFor(string $accessToken, string $organizationId, ?string $branchId = null): array
+    public function resolveFor(string $accessToken, string $organizationId, ?string $branchId = null, bool $fresh = false): array
     {
         try {
-            $result = $this->fetch($accessToken, $organizationId, $branchId);
+            $result = $fresh
+                ? $this->fetchFresh($accessToken, $organizationId, $branchId)
+                : $this->fetch($accessToken, $organizationId, $branchId);
 
             return [
                 'permissions' => collect($result['permissions']),
