@@ -56,7 +56,7 @@ final class SsoCallbackControllerTest extends TestCase
         $accessToken = $this->jwt->token([
             'organization_context_id' => self::ORGANIZATION_CONTEXT_ID,
         ]);
-        $idToken = $this->jwt->token(['nonce' => 'bound-nonce']);
+        $idToken = $this->jwt->idToken(['nonce' => 'bound-nonce']);
         $this->fakeOidc($accessToken, $idToken);
 
         $response = $this->withSession($this->boundSession())
@@ -221,7 +221,7 @@ final class SsoCallbackControllerTest extends TestCase
     {
         $this->fakeOidc(
             $this->jwt->token(['organization_context_id' => self::ORGANIZATION_CONTEXT_ID]),
-            $this->jwt->token(['nonce' => 'attacker-nonce']),
+            $this->jwt->idToken(['nonce' => 'attacker-nonce']),
         );
 
         $this->expectCallbackFailure('nonce mismatch');
@@ -231,7 +231,7 @@ final class SsoCallbackControllerTest extends TestCase
     {
         $this->fakeOidc(
             $this->jwt->token(['organization_context_id' => self::ORGANIZATION_CONTEXT_ID]),
-            $this->jwt->token(['sub' => 'user-2', 'nonce' => 'bound-nonce']),
+            $this->jwt->idToken(['sub' => 'user-2', 'nonce' => 'bound-nonce']),
         );
 
         $this->expectCallbackFailure('subjects do not match');
@@ -241,7 +241,7 @@ final class SsoCallbackControllerTest extends TestCase
     {
         $this->fakeOidc(
             $this->jwt->token(['organization_context_id' => '3efb1df0-1814-480c-9566-42d339758da8']),
-            $this->jwt->token(['nonce' => 'bound-nonce']),
+            $this->jwt->idToken(['nonce' => 'bound-nonce']),
         );
 
         $this->expectCallbackFailure('organization context does not match');

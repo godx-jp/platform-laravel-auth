@@ -18,8 +18,8 @@ jwk.use = 'sig';
 jwk.kid = 'e2e-key';
 
 const base64url = (value) => Buffer.from(value).toString('base64url');
-const jwt = (claims) => {
-  const header = base64url(JSON.stringify({ alg: 'RS256', kid: 'e2e-key', typ: 'at+jwt' }));
+const jwt = (claims, typ = 'at+jwt') => {
+  const header = base64url(JSON.stringify({ alg: 'RS256', kid: 'e2e-key', typ }));
   const payload = base64url(JSON.stringify(claims));
   const signature = sign('RSA-SHA256', Buffer.from(`${header}.${payload}`), privateKey).toString('base64url');
   return `${header}.${payload}.${signature}`;
@@ -89,7 +89,7 @@ export async function startFakeIdp() {
       activeSessions.set(client.slug, sid);
       return sendJson(response, 200, {
         access_token: jwt({ iss: issuer, aud: client.slug, sub: 'e2e-user', sid, iat: now, exp: now + 900, organization_context_id: grant.tokenOrganization }),
-        id_token: jwt({ iss: issuer, aud: client.slug, sub: 'e2e-user', iat: now, exp: now + 900, nonce: grant.nonce }),
+        id_token: jwt({ iss: issuer, aud: grant.client_id, sub: 'e2e-user', iat: now, exp: now + 900, nonce: grant.nonce }, 'JWT'),
         token_type: 'Bearer',
         expires_in: 900,
       });

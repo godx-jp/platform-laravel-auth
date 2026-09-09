@@ -67,7 +67,7 @@ final class SsoCallbackOrganizationClaimTest extends TestCase
 
         $this->fakeOidc(
             $this->jwt->token(['organization_id' => self::PLATFORM_ORGANIZATION_ID]),
-            $this->jwt->token(['nonce' => 'bound-nonce']),
+            $this->jwt->idToken(['nonce' => 'bound-nonce']),
         );
 
         $response = $this->withSession($this->boundSession())
@@ -83,7 +83,7 @@ final class SsoCallbackOrganizationClaimTest extends TestCase
 
         $this->fakeOidc(
             $this->jwt->token(['organization_id' => '0198aaaa-bbbb-7ccc-8ddd-eeeeffff0000']),
-            $this->jwt->token(['nonce' => 'bound-nonce']),
+            $this->jwt->idToken(['nonce' => 'bound-nonce']),
         );
 
         $this->expectCallbackFailure('organization does not match');
@@ -93,7 +93,7 @@ final class SsoCallbackOrganizationClaimTest extends TestCase
     {
         $this->fakeOidc(
             $this->jwt->token(['organization_id' => self::PLATFORM_ORGANIZATION_ID]),
-            $this->jwt->token(['nonce' => 'bound-nonce']),
+            $this->jwt->idToken(['nonce' => 'bound-nonce']),
         );
 
         $this->expectCallbackFailure('missing a verifiable organization claim');
@@ -105,7 +105,7 @@ final class SsoCallbackOrganizationClaimTest extends TestCase
 
         $this->fakeOidc(
             $this->jwt->token(),
-            $this->jwt->token(['nonce' => 'bound-nonce']),
+            $this->jwt->idToken(['nonce' => 'bound-nonce']),
         );
 
         $this->expectCallbackFailure('missing a verifiable organization claim');
@@ -120,7 +120,7 @@ final class SsoCallbackOrganizationClaimTest extends TestCase
                 'organization_context_id' => '3efb1df0-1814-480c-9566-42d339758da8',
                 'organization_id' => self::PLATFORM_ORGANIZATION_ID,
             ]),
-            $this->jwt->token(['nonce' => 'bound-nonce']),
+            $this->jwt->idToken(['nonce' => 'bound-nonce']),
         );
 
         $this->expectCallbackFailure('organization context does not match');
@@ -132,7 +132,7 @@ final class SsoCallbackOrganizationClaimTest extends TestCase
 
         $this->fakeOidc(
             $this->jwt->token(['organization_id' => self::PLATFORM_ORGANIZATION_ID]),
-            $this->jwt->token([
+            $this->jwt->idToken([
                 'nonce' => 'bound-nonce',
                 'name' => 'Famgia Info',
                 'email' => 'info@example.test',
@@ -157,7 +157,7 @@ final class SsoCallbackOrganizationClaimTest extends TestCase
                 'name' => 'Access Token Name',
                 'email' => 'access@example.test',
             ]),
-            $this->jwt->token([
+            $this->jwt->idToken([
                 'nonce' => 'bound-nonce',
                 'name' => 'Id Token Name',
                 'email' => 'id@example.test',

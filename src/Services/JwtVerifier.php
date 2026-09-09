@@ -29,7 +29,18 @@ final class JwtVerifier
     /** @return array<string, mixed> validated ID-token claims */
     public function verifyIdToken(string $jwt, string $expectedNonce): array
     {
-        $expectedAudience = (string) config('sso.service_slug');
+        // OIDC ID tokens target the relying party's client_id. Access tokens
+        // continue to target the resource server's service_slug in verify().
+        $expectedAudience = (string) config('sso.client_id');
+        if ($expectedAudience === '') {
+            throw new SsoException('SSO client ID is not configured.');
+        }
+
+        $type = $this->header($jwt)['typ'] ?? null;
+        if (is_string($type) && strcasecmp($type, 'at+jwt') === 0) {
+            throw new SsoException('SSO ID token must not be an access token.');
+        }
+
         $claims = $this->verifyForAudience($jwt, $expectedAudience);
 
         $nonce = $claims['nonce'] ?? null;

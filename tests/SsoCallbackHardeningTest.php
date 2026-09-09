@@ -106,7 +106,7 @@ final class SsoCallbackHardeningTest extends TestCase
         $accessToken = $this->jwt->token([
             'organization_context_id' => self::ORGANIZATION_CONTEXT_ID,
         ]);
-        $idToken = $this->jwt->token(['nonce' => 'bound-nonce']);
+        $idToken = $this->jwt->idToken(['nonce' => 'bound-nonce']);
 
         Http::fake([
             'https://id.example.test/.well-known/openid-configuration' => Http::response([

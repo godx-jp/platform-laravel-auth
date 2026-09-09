@@ -96,7 +96,7 @@ The `201` response contains `client_id` (`si_…`) and `client_secret` (`sk_…`
 ```dotenv
 # .env
 SSO_ISSUER=https://platform.test
-SSO_SERVICE_SLUG=my-service-local          # the INSTANCE slug = token audience
+SSO_SERVICE_SLUG=my-service-local          # the INSTANCE slug = access-token audience
 SSO_CLIENT_ID=si_...
 SSO_CLIENT_SECRET=sk_...
 SSO_REDIRECT_URI=https://my-app.test/auth/callback

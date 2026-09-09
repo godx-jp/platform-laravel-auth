@@ -267,7 +267,7 @@ final class SsoManagerAndEventsTest extends TestCase
     private function fakeCallbackIdp(): void
     {
         $accessToken = $this->jwt->token(['organization_context_id' => self::ORG_ID]);
-        $idToken = $this->jwt->token(['nonce' => 'bound-nonce']);
+        $idToken = $this->jwt->idToken(['nonce' => 'bound-nonce']);
 
         Http::fake([
             'https://id.example.test/.well-known/openid-configuration' => Http::response([
