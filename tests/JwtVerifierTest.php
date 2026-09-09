@@ -30,6 +30,7 @@ final class JwtVerifierTest extends TestCase
         $app['config']->set('cache.default', 'array');
         $app['config']->set('sso.issuer', 'https://id.example.test');
         $app['config']->set('sso.service_slug', 'consumer-a');
+        $app['config']->set('sso.client_id', 'consumer-a-client');
         $app['config']->set('sso.leeway', 0);
     }
 
@@ -45,12 +46,12 @@ final class JwtVerifierTest extends TestCase
     public function test_it_verifies_signature_expiry_issuer_audience_subject_and_nonce(): void
     {
         $claims = $this->app->make(JwtVerifier::class)->verifyIdToken(
-            $this->jwt->token(['nonce' => 'bound-nonce']),
+            $this->jwt->idToken(['nonce' => 'bound-nonce']),
             'bound-nonce',
         );
 
         $this->assertSame('user-1', $claims['sub']);
-        $this->assertSame('consumer-a', $claims['aud']);
+        $this->assertSame('consumer-a-client', $claims['aud']);
     }
 
     /** @param array<string, mixed> $claims */
@@ -171,7 +172,7 @@ final class JwtVerifierTest extends TestCase
         foreach ([null, 'attacker-nonce', ['polluted']] as $nonce) {
             try {
                 $this->app->make(JwtVerifier::class)->verifyIdToken(
-                    $this->jwt->token(array_filter(['nonce' => $nonce])),
+                    $this->jwt->idToken(array_filter(['nonce' => $nonce])),
                     'bound-nonce',
                 );
                 $this->fail('Expected nonce validation to fail.');
@@ -184,12 +185,12 @@ final class JwtVerifierTest extends TestCase
     public function test_it_enforces_authorized_party_for_multi_audience_id_tokens(): void
     {
         foreach ([
-            ['aud' => ['consumer-a', 'consumer-b'], 'nonce' => 'bound-nonce'],
-            ['aud' => ['consumer-a', 'consumer-b'], 'azp' => 'consumer-b', 'nonce' => 'bound-nonce'],
+            ['aud' => ['consumer-a-client', 'consumer-b'], 'nonce' => 'bound-nonce'],
+            ['aud' => ['consumer-a-client', 'consumer-b'], 'azp' => 'consumer-b', 'nonce' => 'bound-nonce'],
         ] as $claims) {
             try {
                 $this->app->make(JwtVerifier::class)->verifyIdToken(
-                    $this->jwt->token($claims),
+                    $this->jwt->idToken($claims),
                     'bound-nonce',
                 );
                 $this->fail('Expected authorized-party validation to fail.');
@@ -199,14 +200,14 @@ final class JwtVerifierTest extends TestCase
         }
 
         $valid = $this->app->make(JwtVerifier::class)->verifyIdToken(
-            $this->jwt->token([
-                'aud' => ['consumer-a', 'consumer-b'],
-                'azp' => 'consumer-a',
+            $this->jwt->idToken([
+                'aud' => ['consumer-a-client', 'consumer-b'],
+                'azp' => 'consumer-a-client',
                 'nonce' => 'bound-nonce',
             ]),
             'bound-nonce',
         );
-        $this->assertSame('consumer-a', $valid['azp']);
+        $this->assertSame('consumer-a-client', $valid['azp']);
     }
 
     public function test_it_rejects_a_structurally_invalid_audience_without_type_coercion(): void
@@ -217,6 +218,63 @@ final class JwtVerifierTest extends TestCase
         $this->app->make(JwtVerifier::class)->verify($this->jwt->token([
             'aud' => ['consumer-a', ['polluted']],
         ]));
+    }
+
+    public function test_id_tokens_cannot_use_the_service_slug_as_their_audience(): void
+    {
+        $this->expectException(SsoException::class);
+        $this->expectExceptionMessage('audience is not this service');
+        $this->app->make(JwtVerifier::class)->verifyIdToken(
+            $this->jwt->idToken(['aud' => 'consumer-a', 'nonce' => 'bound-nonce']),
+            'bound-nonce',
+        );
+    }
+
+    public function test_access_tokens_still_require_the_service_slug_audience(): void
+    {
+        $verifier = $this->app->make(JwtVerifier::class);
+        $this->assertSame('consumer-a', $verifier->verify($this->jwt->token())['aud']);
+        $this->expectException(SsoException::class);
+        $this->expectExceptionMessage('audience is not this service');
+        $verifier->verify($this->jwt->token(['aud' => 'consumer-a-client']));
+    }
+
+    public function test_an_access_token_cannot_be_substituted_for_an_id_token_even_with_matching_audience_and_nonce(): void
+    {
+        $this->expectException(SsoException::class);
+        $this->expectExceptionMessage('ID token must not be an access token');
+        $this->app->make(JwtVerifier::class)->verifyIdToken(
+            $this->jwt->token(['aud' => 'consumer-a-client', 'nonce' => 'bound-nonce']),
+            'bound-nonce',
+        );
+    }
+
+    public function test_an_id_token_cannot_be_substituted_for_an_access_token(): void
+    {
+        $this->expectException(SsoException::class);
+        $this->expectExceptionMessage('not an RFC 9068 at+jwt');
+        $this->app->make(JwtVerifier::class)->verify($this->jwt->idToken(['aud' => 'consumer-a']));
+    }
+
+    public function test_single_audience_id_token_rejects_a_service_slug_authorized_party(): void
+    {
+        $this->expectException(SsoException::class);
+        $this->expectExceptionMessage('authorized party mismatch');
+        $this->app->make(JwtVerifier::class)->verifyIdToken(
+            $this->jwt->idToken(['nonce' => 'bound-nonce', 'azp' => 'consumer-a']),
+            'bound-nonce',
+        );
+    }
+
+    public function test_id_tokens_require_a_nonempty_configured_client_id(): void
+    {
+        config(['sso.client_id' => '']);
+        $this->expectException(SsoException::class);
+        $this->expectExceptionMessage('client ID is not configured');
+        $this->app->make(JwtVerifier::class)->verifyIdToken(
+            $this->jwt->idToken(['aud' => '', 'nonce' => 'bound-nonce']),
+            'bound-nonce',
+        );
     }
 
     private function fakeDiscoveryAndJwks(): void

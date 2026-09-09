@@ -110,7 +110,7 @@ final class RfcComplianceTest extends TestCase
         $this->fakeJwksOnly();
 
         $claims = $this->app->make(JwtVerifier::class)
-            ->verifyIdToken($this->jwt->token(['nonce' => 'n-1'], headers: ['typ' => 'JWT']), 'n-1');
+            ->verifyIdToken($this->jwt->idToken(['nonce' => 'n-1']), 'n-1');
 
         $this->assertSame('user-1', $claims['sub']);
     }
@@ -217,7 +217,7 @@ final class RfcComplianceTest extends TestCase
     public function test_a_transaction_within_the_ttl_still_completes(): void
     {
         $accessToken = $this->jwt->token(['organization_context_id' => self::ORGANIZATION_CONTEXT_ID]);
-        $idToken = $this->jwt->token(['nonce' => 'n']);
+        $idToken = $this->jwt->idToken(['nonce' => 'n']);
         $this->fakeFullIdp($accessToken, $idToken);
 
         $this->withSession([

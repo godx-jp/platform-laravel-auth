@@ -61,6 +61,12 @@ final class JwtFactory
         ], $claims), $this->privateKey, 'RS256', $keyId ?? $this->keyId, array_merge(['typ' => 'at+jwt'], $headers));
     }
 
+    /** @param array<string, mixed> $claims */
+    public function idToken(array $claims = []): string
+    {
+        return $this->token(array_merge(['aud' => 'consumer-a-client'], $claims), headers: ['typ' => 'JWT']);
+    }
+
     /** @return array{keys: array<int, array<string, mixed>>} */
     public function jwks(): array
     {
