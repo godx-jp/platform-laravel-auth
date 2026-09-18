@@ -1,8 +1,36 @@
 name: Package tests
 
 on:
+  # L6 (#20 mục 5) — kho này là một package có nhiều tài liệu (`LOGIN-FLOW.md`…),
+  # và trước đây sửa một tệp `.md` kích cả E2E hai consumer. Viết lặp ở cả hai sự
+  # kiện: trình đọc workflow của GitHub không nở anchor YAML, và một filter chỉ
+  # đặt ở `push` không ngăn được lượt `pull_request` của đúng sha đó.
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.vscode/**'
+      - 'LICENSE'
+  # #20 mục 6 — TRƯỚC ĐÂY WORKFLOW NÀY CHỈ NGHE `push: main`, nghĩa là một PR
+  # không chạy MỘT bài test nào trước khi merge. Với một package mà hai kho khác
+  # phụ thuộc, đó là lỗ hổng lớn hơn mọi con số về thời gian trong issue.
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.vscode/**'
+      - 'LICENSE'
+
+# L7 (#20 mục 4) — push thứ hai làm kết quả push thứ nhất vô nghĩa.
+# Khoá theo TÊN NHÁNH chứ không `github.ref`: `push` sinh `refs/heads/<nhánh>`,
+# `pull_request` sinh `refs/pull/N/merge` — hai chuỗi khác nhau nên KHÔNG bao giờ
+# gộp được, và một nhánh có PR sẽ chạy hai lượt song song (đo ở godx-tiximax#393).
+concurrency:
+  group: tests-${{ github.event.pull_request.head.ref || github.ref_name }}
+  # KHÔNG huỷ trên `main`: lượt ở đó là bằng chứng của cổng, và một entry
+  # "cancelled" trong lịch sử trunk đọc y hệt một lượt đỏ.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -54,6 +82,17 @@ jobs:
 
   browser-e2e:
     name: Two-consumer browser E2E
+    # L4 (#20 mục 1) — làn CHẬM, KHÔNG gác merge. Job này đo 462s, tức 67% wall
+    # của cả lượt, trong khi `PHP 8.4` chỉ 55s. Giá trị của một bộ E2E hai
+    # consumer không đổi khi nó chạy trên trunk thay vì trên từng PR.
+    #
+    # Nên: mọi `push: main` vẫn chạy nó (trunk vẫn được gác đầy đủ), còn PR thì
+    # chỉ chạy khi được gắn nhãn `run-e2e` — đúng cơ chế issue đề xuất. PR nào
+    # đụng luồng đăng nhập thì gắn nhãn; PR còn lại vẫn có cổng `PHP 8.4`, thứ
+    # trước đây KHÔNG hề chạy trên PR.
+    if: >-
+      github.event_name != 'pull_request'
+      || contains(github.event.pull_request.labels.*.name, 'run-e2e')
     runs-on: [self-hosted, swarm-pool]
 
     env:
