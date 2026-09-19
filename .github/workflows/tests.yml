@@ -98,10 +98,21 @@ jobs:
     env:
       # Chromium của Playwright nằm sẵn trong image ở `/opt/ms-playwright`
       # (bake theo playwright 1.62.1). `run.sh` vẫn gọi `playwright install
-      # chromium` như cũ: khớp bản thì bước ấy chỉ kiểm-và-thoát (0,5s); lệch
-      # bản (tests/e2e đang khoá 1.61.1) thì nó tải bản thiếu vào cùng thư mục
-      # — job chạy bằng root nên ghi được. KHÔNG trỏ về `~/.cache` mặc định:
-      # `$HOME` trên runner dùng chung không thuộc về CI.
+      # chromium`: KHỚP bản thì bước ấy chỉ kiểm-và-thoát (0,5s).
+      #
+      # Trước 2026-09-19 nó KHÔNG khớp — `tests/e2e` khoá 1.61.1 trong khi image
+      # bake 1.62.1, nên mỗi lượt E2E tải lại trình duyệt vào cùng thư mục. Đo
+      # trên run 35379526243: hai bản tải, 18:20:46 → 18:21:12 = **26 giây mỗi
+      # lượt**, cho một thứ image đã có sẵn.
+      #
+      # Gốc rễ là dải semver: `^1.55.0` bao cả 1.61.1 lẫn 1.62.1, nên lockfile
+      # trôi khỏi image mà không gì báo. Playwright ghim một bản TRÌNH DUYỆT cụ
+      # thể, nên nó phải được ghim CHÍNH XÁC bằng bản đã bake — caret ở đây biến
+      # `npm ci` và `npm install` thành hai môi trường khác nhau. Nay là `1.62.1`
+      # không caret; đổi image thì phải đổi cả con số này.
+      #
+      # KHÔNG trỏ về `~/.cache` mặc định: `$HOME` trên runner dùng chung không
+      # thuộc về CI.
       PLAYWRIGHT_BROWSERS_PATH: /opt/ms-playwright
 
     steps:
