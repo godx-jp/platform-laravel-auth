@@ -16,6 +16,17 @@ on:
   # không chạy MỘT bài test nào trước khi merge. Với một package mà hai kho khác
   # phụ thuộc, đó là lỗ hổng lớn hơn mọi con số về thời gian trong issue.
   pull_request:
+    # `labeled` PHẢI có, nếu không cổng nhãn `run-e2e` bên dưới không dùng được.
+    # Mặc định của `pull_request` là [opened, synchronize, reopened]; gắn nhãn
+    # KHÔNG nằm trong đó, nên luồng tự nhiên — mở PR, thấy cần E2E, gắn nhãn —
+    # không kích lại gì cả, và job vẫn `skipping`. Đo trực tiếp trên PR #24:
+    # gắn nhãn xong, `Two-consumer browser E2E` vẫn `skipping` cho tới khi có
+    # một push mới.
+    #
+    # Ngược lại, KHÔNG thu về riêng `types: [labeled]`: thế thì cổng đóng băng ở
+    # một thời điểm và không bao giờ chạy lại cho commit sau (godx-tiximax-jp#29).
+    # Cần cả bốn.
+    types: [opened, synchronize, reopened, labeled]
     paths-ignore:
       - '**.md'
       - 'docs/**'
