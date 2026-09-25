@@ -128,7 +128,14 @@ return [
     | `php artisan dxs:sync-authz` PUTs it to the platform authz endpoint.
     */
     'service_id' => env('SSO_SERVICE_ID', ''),                            // {service} for the authz route
-    'admin_token' => env('SSO_ADMIN_TOKEN', ''),                          // bearer w/ catalog.authz.manage
+    /*
+     * `admin` — PUT with SSO_ADMIN_TOKEN (Bearer) to authz_path (default admin catalog).
+     * `dev` — PUT with SSO_ADMIN_KEY (X-Admin-Key) to the dev-admin mirror (default by slug).
+     * Leave empty to auto-select `dev` when SSO_ADMIN_KEY is set, otherwise `admin`.
+     */
+    'authz_mode' => env('SSO_AUTHZ_MODE', ''),
+    'admin_token' => env('SSO_ADMIN_TOKEN', ''),                          // admin mode: bearer (when platform accepts it)
+    'admin_key' => env('SSO_ADMIN_KEY', ''),                              // dev mode: dev-admin mirror key
     'authz_path' => env('SSO_AUTHZ_PATH', 'api/admin/catalog/{service}/authz'),
 
     // Where to send the user after a successful / failed login.

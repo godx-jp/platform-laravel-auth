@@ -7,6 +7,7 @@ namespace Dxs\Auth\Tests;
 use Dxs\Auth\Exceptions\SsoException;
 use Dxs\Auth\SsoClientServiceProvider;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
 use Orchestra\Testbench\TestCase;
 
@@ -22,6 +23,7 @@ final class SyncAuthzCommandTest extends TestCase
         $app['config']->set('sso.issuer', 'https://id.example.test');
         $app['config']->set('sso.service_id', 'consumer-a');
         $app['config']->set('sso.admin_token', 'admin-secret');
+        $app['config']->set('sso.authz_mode', 'admin');
         $app['config']->set('sso.http_timeout', 5);
         $app['config']->set('authz', $this->catalog('consumer-a.read'));
     }
@@ -85,9 +87,92 @@ final class SyncAuthzCommandTest extends TestCase
     public function test_missing_admin_token_fails_before_http(): void
     {
         Http::fake();
+        config()->set('sso.authz_mode', 'admin');
         config()->set('sso.admin_token', '');
 
         $this->artisan('dxs:sync-authz')->assertFailed();
+
+        Http::assertNothingSent();
+    }
+
+    public function test_dev_mode_puts_catalog_to_dev_admin_mirror_with_admin_key(): void
+    {
+        Http::fake(['*' => Http::response(['registered' => true])]);
+        config()->set('sso.authz_mode', 'dev');
+        config()->set('sso.admin_key', 'dev-admin-key');
+        config()->set('sso.admin_token', '');
+
+        $this->artisan('dxs:sync-authz')->assertSuccessful();
+
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+            && $request->url() === 'https://id.example.test/api/dev/services/consumer-a/authz'
+            && $request->hasHeader('X-Admin-Key', 'dev-admin-key')
+            && ! $request->hasHeader('Authorization')
+            && $request->data() === $this->catalog('consumer-a.read'));
+    }
+
+    public function test_dev_mode_routes_by_service_slug_not_service_id(): void
+    {
+        Http::fake(['*' => Http::response(['registered' => true])]);
+        config()->set('sso.authz_mode', 'dev');
+        config()->set('sso.admin_key', 'dev-admin-key');
+        config()->set('sso.service_id', '01900000-0000-7000-8000-000000000000');
+        config()->set('sso.service_slug', 'consumer-a');
+
+        $this->artisan('dxs:sync-authz')->assertSuccessful();
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://id.example.test/api/dev/services/consumer-a/authz');
+    }
+
+    public function test_admin_key_without_explicit_mode_auto_selects_dev(): void
+    {
+        Http::fake(['*' => Http::response(['registered' => true])]);
+        config()->set('sso.authz_mode', '');
+        config()->set('sso.admin_key', 'dev-admin-key');
+        config()->set('sso.admin_token', '');
+
+        $this->artisan('dxs:sync-authz')->assertSuccessful();
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://id.example.test/api/dev/services/consumer-a/authz'
+            && $request->hasHeader('X-Admin-Key', 'dev-admin-key'));
+    }
+
+    public function test_missing_admin_key_fails_in_dev_mode_before_http(): void
+    {
+        Http::fake();
+        config()->set('sso.authz_mode', 'dev');
+        config()->set('sso.admin_key', '');
+
+        $this->artisan('dxs:sync-authz')->assertFailed();
+
+        Http::assertNothingSent();
+    }
+
+    public function test_invalid_authz_mode_fails_before_http(): void
+    {
+        Http::fake();
+        config()->set('sso.authz_mode', 'production');
+
+        $this->artisan('dxs:sync-authz')->assertFailed();
+
+        Http::assertNothingSent();
+    }
+
+    public function test_dev_dry_run_prints_equivalent_curl_without_http(): void
+    {
+        Http::fake();
+        config()->set('sso.authz_mode', 'dev');
+        config()->set('sso.admin_key', 'dev-admin-key');
+
+        $exitCode = Artisan::call('dxs:sync-authz', ['--dry-run' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exitCode);
+        $this->assertStringContainsString('curl -sS -X PUT', $output);
+        // The real key must never reach the terminal or CI logs.
+        $this->assertStringNotContainsString('dev-admin-key', $output);
+        $this->assertStringContainsString('$SSO_ADMIN_KEY', $output);
+        $this->assertStringContainsString('api/dev/services/consumer-a/authz', $output);
 
         Http::assertNothingSent();
     }

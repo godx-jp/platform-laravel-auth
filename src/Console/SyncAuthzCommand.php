@@ -16,13 +16,18 @@ use Illuminate\Support\Facades\Http;
  *   php artisan dxs:sync-authz [--dry-run]
  *
  * The catalog is owned by the service in `config/authz.php`
- * (`permissions`, `roles`, `default_role`). Registration is admin-gated on the
- * platform, so it runs with an admin bearer (SSO_ADMIN_TOKEN) — typically from
- * CI or an operator, not the app runtime. Target:
- * `PUT {issuer}/{authz_path}` with `{service}` = config('sso.service_id').
+ * (`permissions`, `roles`, `default_role`).
+ *
+ * Sync mode (`SSO_AUTHZ_MODE`, or auto when `SSO_ADMIN_KEY` is set):
+ * - `dev` — local dev-admin mirror: `PUT api/dev/services/{slug}/authz` with `X-Admin-Key`
+ * - `admin` — platform admin catalog route (Bearer `SSO_ADMIN_TOKEN`; today often BFF-session only)
  */
 final class SyncAuthzCommand extends Command
 {
+    private const ADMIN_DEFAULT_PATH = 'api/admin/catalog/{service}/authz';
+
+    private const DEV_DEFAULT_PATH = 'api/dev/services/{service}/authz';
+
     protected $signature = 'dxs:sync-authz {--dry-run : Print the payload without sending} {--if-changed : Skip when the catalog matches the last successful sync}';
 
     protected $description = 'Sync this service\'s authorization catalog to the GoDX ID platform';
@@ -58,36 +63,62 @@ final class SyncAuthzCommand extends Command
             return self::FAILURE;
         }
 
-        $this->line("Syncing {$count} permission code(s) for service [{$service}]");
+        $mode = $this->resolveAuthzMode();
+        if (! in_array($mode, ['admin', 'dev'], true)) {
+            $this->error('SSO_AUTHZ_MODE must be `admin` or `dev`.');
+
+            return self::FAILURE;
+        }
+
+        $this->line("Syncing {$count} permission code(s) for service [{$service}] ({$mode} mode)");
+
+        $url = $this->authzUrl($service, $mode);
 
         if ($this->option('dry-run')) {
             $this->line(json_encode($catalog, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
+            if ($mode === 'dev') {
+                $this->newLine();
+                $this->comment('Dev-admin equivalent (runs automatically when SSO_AUTHZ_MODE=dev):');
+                $this->line($this->devCurlCommand($url, $catalog));
+            }
+
             return self::SUCCESS;
         }
 
-        $catalogHash = hash('sha256', json_encode([$service, config('sso.issuer'), $catalog], JSON_THROW_ON_ERROR));
-        $hashKey = SsoCache::key('authz-sync:'.$service);
+        $catalogHash = hash('sha256', json_encode([$service, config('sso.issuer'), $mode, $catalog], JSON_THROW_ON_ERROR));
+        $hashKey = SsoCache::key('authz-sync:'.$service.':'.$mode);
         if ($this->option('if-changed') && SsoCache::store()->get($hashKey) === $catalogHash) {
             $this->info('Catalog unchanged since the last successful sync — skipping.');
 
             return self::SUCCESS;
         }
 
-        $token = (string) config('sso.admin_token');
-        if ($token === '') {
-            $this->error('SSO_ADMIN_TOKEN is not set — an admin bearer with `catalog.authz.manage` is required.');
+        if ($mode === 'dev') {
+            $key = (string) config('sso.admin_key');
+            if ($key === '') {
+                $this->error('SSO_ADMIN_KEY is not set — required for dev authz sync (X-Admin-Key).');
 
-            return self::FAILURE;
+                return self::FAILURE;
+            }
+
+            $response = Http::withHeaders(['X-Admin-Key' => $key])
+                ->timeout((int) config('sso.http_timeout', 5))
+                ->acceptJson()
+                ->put($url, $catalog);
+        } else {
+            $token = (string) config('sso.admin_token');
+            if ($token === '') {
+                $this->error('SSO_ADMIN_TOKEN is not set — required for admin authz sync (Bearer).');
+
+                return self::FAILURE;
+            }
+
+            $response = Http::withToken($token)
+                ->timeout((int) config('sso.http_timeout', 5))
+                ->acceptJson()
+                ->put($url, $catalog);
         }
-
-        $path = str_replace('{service}', rawurlencode($service), (string) config('sso.authz_path'));
-        $url = rtrim((string) config('sso.issuer'), '/').'/'.ltrim($path, '/');
-
-        $response = Http::withToken($token)
-            ->timeout((int) config('sso.http_timeout', 5))
-            ->acceptJson()
-            ->put($url, $catalog);
 
         if ($response->failed()) {
             $this->error("Sync failed ({$response->status()}).");
@@ -99,6 +130,52 @@ final class SyncAuthzCommand extends Command
         $this->info("Permission catalog synced ({$count} codes).");
 
         return self::SUCCESS;
+    }
+
+    private function resolveAuthzMode(): string
+    {
+        $configured = config('sso.authz_mode');
+        if (is_string($configured) && $configured !== '') {
+            return $configured;
+        }
+
+        return (string) config('sso.admin_key') !== '' ? 'dev' : 'admin';
+    }
+
+    private function authzUrl(string $service, string $mode): string
+    {
+        $configuredPath = (string) config('sso.authz_path');
+        $pathTemplate = $configuredPath;
+        if ($mode === 'dev' && $configuredPath === self::ADMIN_DEFAULT_PATH) {
+            $pathTemplate = self::DEV_DEFAULT_PATH;
+        }
+
+        // The dev-admin mirror routes by SLUG (`services/{slug}/authz`), the admin catalog
+        // by `SSO_SERVICE_ID` — so dev mode prefers `SSO_SERVICE_SLUG` when it is set.
+        $segment = $service;
+        if ($mode === 'dev' && (string) config('sso.service_slug') !== '') {
+            $segment = (string) config('sso.service_slug');
+        }
+
+        $path = str_replace('{service}', rawurlencode($segment), $pathTemplate);
+
+        return rtrim((string) config('sso.issuer'), '/').'/'.ltrim($path, '/');
+    }
+
+    /** @param array<string, mixed> $catalog */
+    private function devCurlCommand(string $url, array $catalog): string
+    {
+        $payload = json_encode($catalog, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        // NEVER the real key: dry-run output lands in CI logs and terminals.
+        $keyDisplay = '$SSO_ADMIN_KEY';
+
+        return sprintf(
+            'curl -sS -X PUT %s -H %s -H %s --data %s',
+            escapeshellarg($url),
+            escapeshellarg('X-Admin-Key: '.$keyDisplay),
+            escapeshellarg('Content-Type: application/json'),
+            escapeshellarg($payload !== false ? $payload : '{}'),
+        );
     }
 
     /** @param array<string, mixed> $catalog */

@@ -310,23 +310,35 @@ If the browser remains on the old page, check these in order:
 Declare permissions/roles in `config/authz.php` (see the package README), then:
 
 ```bash
-php artisan dxs:sync-authz --dry-run   # inspect the payload
+php artisan dxs:sync-authz --dry-run   # inspect the payload (+ dev-mode curl)
 ```
 
-Known platform-side caveats for the real sync (as of 2026-07):
+**Recommended for local development:** set `SSO_AUTHZ_MODE=dev`, `SSO_ADMIN_KEY`, and
+`SSO_SERVICE_ID` to your **service instance slug**. The command PUTs the same manifest the
+manual curl used to send:
+
+```dotenv
+SSO_AUTHZ_MODE=dev
+SSO_ADMIN_KEY=...
+SSO_SERVICE_ID=my-service-local   # slug — not the admin-console service UUID
+```
+
+```bash
+php artisan dxs:sync-authz
+```
+
+Platform-side caveats for **admin** mode (`SSO_AUTHZ_MODE=admin`, the default when no admin key
+is configured):
 
 - `SSO_SERVICE_ID` must be the **Service UUID** (route-model binding on
   `api/admin/catalog/{service}` binds by id, not slug).
 - The `api/admin/*` surface authenticates the **admin-web BFF session**, not a
-  bearer token — so `dxs:sync-authz` with `SSO_ADMIN_TOKEN` may 401 against
-  current platforms. Locally, the dev-admin mirror accepts the same manifest
-  by **slug** with the admin key:
+  bearer token — so `SSO_ADMIN_TOKEN` may still 401 until the platform exposes a
+  machine credential with `catalog.authz.manage`. Prefer `dev` mode locally; use
+  `--dry-run` to capture JSON if you must curl manually:
 
   ```bash
-  php artisan dxs:sync-authz --dry-run | tail -n +2 > authz.json
-  curl -X PUT "$BASE/api/dev/services/my-service/authz" \
-    -H "X-Admin-Key: $KEY" -H 'Content-Type: application/json' \
-    --data-binary @authz.json
+  php artisan dxs:sync-authz --dry-run   # dev mode also prints the exact curl
   ```
 
 - Verify with the admin CLI: `gxa service permissions list <service-uuid>` /

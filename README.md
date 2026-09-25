@@ -144,7 +144,27 @@ provided.
 | `POST {prefix}/backchannel-logout` | Validate an OIDC logout token and revoke its local session lineage |
 | `sso.auth` middleware    | Validate a platform-issued bearer (JWKS/`aud`/`exp`) and resolve the local user |
 | `Gate::before`           | Grant an ability iff it is in the platform-resolved permission list |
-| `dxs:sync-authz` | Push this service's declared authorization catalog from `config/authz.php` to the platform |
+| `dxs:sync-authz` | Push this service's declared authorization catalog from `config/authz.php` to the platform (see [authz sync](docs/onboarding.md#step-5--sync-the-authorization-catalog)) |
+
+### Authorization catalog sync (`dxs:sync-authz`)
+
+Declare permissions in `config/authz.php`, set `SSO_SERVICE_ID` (service **UUID** for admin
+catalog routes; **slug** for the local dev-admin mirror), then sync:
+
+```dotenv
+# Local / CI against the dev-admin mirror (first-class today):
+SSO_AUTHZ_MODE=dev
+SSO_ADMIN_KEY=...          # X-Admin-Key for PUT /api/dev/services/{slug}/authz
+SSO_SERVICE_ID=my-service  # instance slug
+
+# Future / platform bearer endpoint (may 401 until the IdP accepts machine credentials):
+# SSO_AUTHZ_MODE=admin
+# SSO_ADMIN_TOKEN=...
+# SSO_AUTHZ_PATH=api/admin/catalog/{service}/authz
+```
+
+`php artisan dxs:sync-authz --dry-run` prints the JSON payload; in `dev` mode it also prints
+the equivalent `curl`. Use `--if-changed` in schedulers when `sso.sync.authz.auto` is enabled.
 
 ## Independence
 
