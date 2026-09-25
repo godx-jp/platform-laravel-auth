@@ -20,7 +20,8 @@ php artisan migrate
 Set the `SSO_*` env values and you are done: routes (`/auth/redirect|callback|logout`),
 a fallback named `login` route, and a zero-config JIT provisioner
 (`DatabaseUserProvisioner`, writing your `auth.providers.users.model`) are all
-registered by the package. Publish an app-owned provisioner only when the
+registered by the package. Run `php artisan sso:doctor` to verify the two
+organization UUIDs before your first login. Publish an app-owned provisioner only when the
 mapping needs custom behaviour: `sso:install --provisioner`.
 
 ## Reading the current user's authorization
@@ -83,7 +84,8 @@ SSO_ISSUER=https://platform.godx.jp        # IdP origin; everything else is disc
 SSO_SERVICE_SLUG=my-service                 # token `aud` — this ServiceInstance
 SSO_CLIENT_ID=ci_xxx
 SSO_CLIENT_SECRET=sk_xxx
-SSO_ORGANIZATION_CONTEXT_ID=00000000-0000-4000-8000-000000000000 # fixed only for single-tenant services
+SSO_ORGANIZATION_CONTEXT_ID=00000000-0000-4000-8000-000000000000 # console org id → /sso/authorize
+SSO_ORGANIZATION_ID=01900000-0000-7000-8000-000000000000          # internal organizations.id → token claim (current platform)
 SSO_REDIRECT_URI=https://my-service.example/auth/callback
 # optional: SSO_SCOPES, SSO_ROUTES_PREFIX, SSO_TOKEN_COOKIE, SSO_AFTER_LOGIN, ...
 ```

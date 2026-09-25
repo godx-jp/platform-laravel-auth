@@ -15,6 +15,8 @@ final class SsoRedirectControllerTest extends TestCase
 {
     private const ORGANIZATION_CONTEXT_ID = '9f79d9ee-d735-4673-a80d-c11339f252be';
 
+    private const PLATFORM_ORGANIZATION_ID = '019f6ece-2629-730a-ab0b-0f323d4e2e02';
+
     protected function getPackageProviders($app): array
     {
         return [SsoClientServiceProvider::class];
@@ -68,6 +70,7 @@ final class SsoRedirectControllerTest extends TestCase
     public function test_fixed_single_tenant_context_cannot_be_overridden_by_the_request(): void
     {
         $this->app['config']->set('sso.organization_context_id', self::ORGANIZATION_CONTEXT_ID);
+        $this->app['config']->set('sso.organization_id', self::PLATFORM_ORGANIZATION_ID);
 
         $response = $this->get('/auth/redirect?organization_context_id=3efb1df0-1814-480c-9566-42d339758da8');
         parse_str((string) parse_url((string) $response->headers->get('Location'), PHP_URL_QUERY), $query);
@@ -79,6 +82,7 @@ final class SsoRedirectControllerTest extends TestCase
     {
         $selectedOrganization = '3efb1df0-1814-480c-9566-42d339758da8';
         $this->app['config']->set('sso.organization_context_id', self::ORGANIZATION_CONTEXT_ID);
+        $this->app['config']->set('sso.organization_id', self::PLATFORM_ORGANIZATION_ID);
         $this->app['config']->set('sso.allow_organization_switching', true);
         $this->app['auth']->setUser(new GenericUser(['id' => 1]));
 
@@ -96,6 +100,7 @@ final class SsoRedirectControllerTest extends TestCase
     public function test_an_unauthenticated_request_cannot_override_a_fixed_context_even_when_switching_is_enabled(): void
     {
         $this->app['config']->set('sso.organization_context_id', self::ORGANIZATION_CONTEXT_ID);
+        $this->app['config']->set('sso.organization_id', self::PLATFORM_ORGANIZATION_ID);
         $this->app['config']->set('sso.allow_organization_switching', true);
 
         $response = $this->get('/auth/redirect?organization_context_id=3efb1df0-1814-480c-9566-42d339758da8');
@@ -107,6 +112,7 @@ final class SsoRedirectControllerTest extends TestCase
     public function test_a_malformed_authenticated_switch_context_never_falls_back_to_the_fixed_tenant(): void
     {
         $this->app['config']->set('sso.organization_context_id', self::ORGANIZATION_CONTEXT_ID);
+        $this->app['config']->set('sso.organization_id', self::PLATFORM_ORGANIZATION_ID);
         $this->app['config']->set('sso.allow_organization_switching', true);
         $this->app['auth']->setUser(new GenericUser(['id' => 1]));
         $this->withoutExceptionHandling();
