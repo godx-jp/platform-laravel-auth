@@ -48,7 +48,7 @@ final class AuthenticateSsoBypassTest extends TestCase
 
     public function test_it_passes_through_an_acting_as_user_in_non_production(): void
     {
-        $user = new GenericUser(['id' => 1, 'name' => 'Local Tester']);
+        $user = new GenericUser(['password' => '', 'id' => 1, 'name' => 'Local Tester']);
 
         $this->actingAs($user)
             ->getJson('/protected')
@@ -68,7 +68,7 @@ final class AuthenticateSsoBypassTest extends TestCase
         Http::fake(['*' => Http::response('', 500)]);
         $this->app['env'] = 'production';
 
-        $user = new GenericUser(['id' => 1, 'name' => 'Local Tester']);
+        $user = new GenericUser(['password' => '', 'id' => 1, 'name' => 'Local Tester']);
 
         $this->actingAs($user)
             ->getJson('/protected')
@@ -87,7 +87,7 @@ final class AuthenticateSsoBypassTest extends TestCase
     public function test_all_bypasses_are_disabled_without_explicit_opt_in(): void
     {
         $this->app['config']->set('sso.dev_bypass.enabled', false);
-        $user = new GenericUser(['id' => 1, 'name' => 'Local Tester']);
+        $user = new GenericUser(['password' => '', 'id' => 1, 'name' => 'Local Tester']);
 
         $this->actingAs($user)->getJson('/protected')->assertUnauthorized();
         $this->getJson('/protected', ['Authorization' => 'Bearer dev:person-42'])
@@ -127,7 +127,7 @@ final class BypassProvisioner implements ProvisionsUsers
 
     public function provision(array $claims, array $tokens): Authenticatable
     {
-        return new GenericUser(['id' => self::PROVISIONED_ID, 'sub' => $claims['sub'] ?? null]);
+        return new GenericUser(['password' => '', 'id' => self::PROVISIONED_ID, 'sub' => $claims['sub'] ?? null]);
     }
 
     public function resolveBySubject(string $subject): ?Authenticatable

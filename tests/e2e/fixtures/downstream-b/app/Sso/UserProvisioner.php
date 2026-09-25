@@ -20,6 +20,6 @@ final class UserProvisioner implements ProvisionsUsers
 
     private function user(string $subject): Authenticatable
     {
-        return new GenericUser(['id' => $subject, 'name' => 'E2E User']);
+        return new GenericUser(['password' => '', 'id' => $subject, 'name' => 'E2E User']);
     }
 }

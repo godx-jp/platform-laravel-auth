@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Dxs\Auth;
 
+use Dxs\Auth\Console\DoctorCommand;
 use Dxs\Auth\Console\InstallCommand;
 use Dxs\Auth\Console\SyncAuthzCommand;
 use Dxs\Auth\Contracts\ProvisionsUsers;
@@ -74,7 +75,7 @@ final class SsoClientServiceProvider extends ServiceProvider
         ], 'sso-provisioner');
 
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncAuthzCommand::class, InstallCommand::class]);
+            $this->commands([SyncAuthzCommand::class, InstallCommand::class, DoctorCommand::class]);
         }
 
         // Opt-in scheduled catalog sync: `sso.sync.authz.auto` puts

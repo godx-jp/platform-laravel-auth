@@ -92,7 +92,7 @@ final class AuthenticateSsoMiddlewareTest extends TestCase
 
     public function test_it_reuses_an_existing_local_user_without_reprovisioning(): void
     {
-        $this->provisioner->existingUser = new GenericUser(['id' => 'user-1']);
+        $this->provisioner->existingUser = new GenericUser(['password' => '', 'id' => 'user-1']);
 
         $this->withToken($this->jwt->token())->getJson('/protected')->assertSuccessful();
 
@@ -141,7 +141,7 @@ final class MiddlewareProvisioner implements ProvisionsUsers
     {
         $this->provisionCalls++;
 
-        return new GenericUser(['id' => $claims['sub']]);
+        return new GenericUser(['password' => '', 'id' => $claims['sub']]);
     }
 
     public function resolveBySubject(string $subject): ?Authenticatable
