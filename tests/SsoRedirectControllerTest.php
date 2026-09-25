@@ -84,7 +84,7 @@ final class SsoRedirectControllerTest extends TestCase
         $this->app['config']->set('sso.organization_context_id', self::ORGANIZATION_CONTEXT_ID);
         $this->app['config']->set('sso.organization_id', self::PLATFORM_ORGANIZATION_ID);
         $this->app['config']->set('sso.allow_organization_switching', true);
-        $this->app['auth']->setUser(new GenericUser(['id' => 1]));
+        $this->app['auth']->setUser(new GenericUser(['password' => '', 'id' => 1]));
 
         $response = $this->get('/auth/redirect?'.http_build_query([
             'organization_context_id' => $selectedOrganization,
@@ -114,7 +114,7 @@ final class SsoRedirectControllerTest extends TestCase
         $this->app['config']->set('sso.organization_context_id', self::ORGANIZATION_CONTEXT_ID);
         $this->app['config']->set('sso.organization_id', self::PLATFORM_ORGANIZATION_ID);
         $this->app['config']->set('sso.allow_organization_switching', true);
-        $this->app['auth']->setUser(new GenericUser(['id' => 1]));
+        $this->app['auth']->setUser(new GenericUser(['password' => '', 'id' => 1]));
         $this->withoutExceptionHandling();
 
         $this->expectException(SsoException::class);

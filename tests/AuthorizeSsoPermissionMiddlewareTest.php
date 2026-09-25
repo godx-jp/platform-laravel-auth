@@ -164,7 +164,7 @@ final class SubjectDirectory implements ProvisionsUsers
     {
         $subject = (string) $claims['sub'];
 
-        return $this->users[$subject] = new GenericUser([
+        return $this->users[$subject] = new GenericUser(['password' => '', 
             'id' => $subject,
             'console_access_token' => $tokens['access_token'] ?? null,
             'console_organization_id' => $claims['organization_id'] ?? null,

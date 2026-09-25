@@ -43,7 +43,7 @@ final class PermissionFetchResilienceTest extends TestCase
         parent::setUp();
 
         Cache::flush();
-        Auth::setUser(new GenericUser([
+        Auth::setUser(new GenericUser(['password' => '', 
             'id' => 'user-1',
             'console_access_token' => 'at-1',
             'console_organization_id' => 'org-1',

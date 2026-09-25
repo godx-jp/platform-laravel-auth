@@ -109,7 +109,7 @@ final class SsoManagerAndEventsTest extends TestCase
             'https://id.example.test/api/sso/teams*' => Http::response(['teams' => [['id' => 'team-1']]]),
         ]);
 
-        Auth::setUser(new GenericUser([
+        Auth::setUser(new GenericUser(['password' => '', 
             'id' => 'user-1',
             'console_access_token' => 'at-private',
             'console_organization_id' => self::ORG_ID,
@@ -155,7 +155,7 @@ final class SsoManagerAndEventsTest extends TestCase
                 'authoritative' => false,
             ]),
         ]);
-        Auth::setUser(new GenericUser([
+        Auth::setUser(new GenericUser(['password' => '', 
             'id' => 'user-1',
             'console_access_token' => 'at-1',
             'console_organization_id' => self::ORG_ID,
@@ -167,7 +167,7 @@ final class SsoManagerAndEventsTest extends TestCase
     public function test_a_user_without_platform_context_is_treated_as_unauthenticated_for_permissions(): void
     {
         Http::fake();
-        Auth::setUser(new GenericUser(['id' => 'local-only']));
+        Auth::setUser(new GenericUser(['password' => '', 'id' => 'local-only']));
 
         $this->assertFalse(Sso::check());
         $this->assertTrue(Sso::permissions()->isEmpty());
@@ -219,7 +219,7 @@ final class SsoManagerAndEventsTest extends TestCase
             ]),
         ]);
 
-        $user = new GenericUser(['id' => 'user-1']);
+        $user = new GenericUser(['password' => '', 'id' => 'user-1']);
         $this->actingAs($user)->post('/auth/logout');
 
         Event::assertDispatched(SsoLoggedOut::class, fn (SsoLoggedOut $event): bool => data_get($event->user, 'id') === 'user-1');
@@ -241,7 +241,7 @@ final class SsoManagerAndEventsTest extends TestCase
             ]),
         ]);
 
-        Auth::setUser(new GenericUser([
+        Auth::setUser(new GenericUser(['password' => '', 
             'id' => 'user-1',
             'console_access_token' => 'at-1',
             'console_organization_id' => self::ORG_ID,
@@ -296,7 +296,7 @@ final class RecordingDirectory implements ProvisionsUsers
     {
         $subject = (string) $claims['sub'];
 
-        return $this->users[$subject] = new GenericUser([
+        return $this->users[$subject] = new GenericUser(['password' => '', 
             'id' => $subject,
             'console_access_token' => $tokens['access_token'] ?? null,
         ]);

@@ -61,7 +61,7 @@ final class TurnkeyInstallTest extends TestCase
         {
             public function provision(array $claims, array $tokens): Authenticatable
             {
-                return new GenericUser(['id' => 'custom']);
+                return new GenericUser(['password' => '', 'id' => 'custom']);
             }
 
             public function resolveBySubject(string $subject): ?Authenticatable
