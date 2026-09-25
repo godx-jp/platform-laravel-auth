@@ -257,7 +257,7 @@ final class NoopProvisioner implements ProvisionsUsers
 {
     public function provision(array $claims, array $tokens): Authenticatable
     {
-        return new GenericUser(['id' => $claims['sub'] ?? 'user']);
+        return new GenericUser(['password' => '', 'id' => $claims['sub'] ?? 'user']);
     }
 
     public function resolveBySubject(string $subject): ?Authenticatable

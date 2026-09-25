@@ -36,7 +36,7 @@ final class InstallCommand extends Command
         }
 
         $this->components->info('Next steps:');
-        $this->line('  1. Set the SSO_* env values (issuer, service slug, client id/secret, redirect URI, organization ids).');
+        $this->line('  1. Set the SSO_* env values (issuer, service slug, client id/secret, redirect URI, both organization UUIDs — run `php artisan sso:doctor` to verify).');
         $this->line('  2. php artisan migrate');
         $this->line('  3. Point unauthenticated users at /auth/redirect (a named `login` redirect is registered for you unless your app already defines one).');
         $this->line('  4. Declare your catalog in config/authz.php and run `php artisan dxs:sync-authz --dry-run`.');

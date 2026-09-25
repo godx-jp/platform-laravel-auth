@@ -6,6 +6,7 @@ namespace Dxs\Auth\Http\Controllers;
 
 use Dxs\Auth\Exceptions\SsoConfigurationException;
 use Dxs\Auth\Services\OidcDiscovery;
+use Dxs\Auth\Support\OrganizationConfigurationGuard;
 use Dxs\Auth\Support\Pkce;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,6 +21,8 @@ final class SsoRedirectController
 {
     public function __invoke(Request $request, OidcDiscovery $discovery): RedirectResponse
     {
+        OrganizationConfigurationGuard::assertReadyForAuthorize();
+
         $pkce = Pkce::generate();
         $state = Str::random(40);
         $nonce = Str::random(40);

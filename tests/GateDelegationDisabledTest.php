@@ -28,7 +28,7 @@ final class GateDelegationDisabledTest extends TestCase
         Gate::define('dashboard.view', fn (): bool => true);
         Http::fake();
 
-        $user = new GenericUser([
+        $user = new GenericUser(['password' => '', 
             'id' => 'user-1',
             'console_access_token' => 'platform-access-token',
             'console_organization_id' => 'org-1',

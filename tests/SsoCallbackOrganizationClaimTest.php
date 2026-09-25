@@ -239,7 +239,7 @@ final class ClaimRecordingProvisioner implements ProvisionsUsers
         $this->claims = $claims;
         $this->tokens = $tokens;
 
-        return new GenericUser(['id' => $claims['sub'], 'name' => 'Package User']);
+        return new GenericUser(['password' => '', 'id' => $claims['sub'], 'name' => 'Package User']);
     }
 
     public function resolveBySubject(string $subject): ?Authenticatable

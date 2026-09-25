@@ -80,7 +80,7 @@ final class GateDelegationTest extends TestCase
     {
         Http::fake();
 
-        $localUser = new GenericUser(['id' => 'local-1']);
+        $localUser = new GenericUser(['password' => '', 'id' => 'local-1']);
 
         $this->assertFalse(Gate::forUser($localUser)->allows('dashboard.view'));
         Http::assertNothingSent();
@@ -100,7 +100,7 @@ final class GateDelegationTest extends TestCase
 
     private function platformUser(): GenericUser
     {
-        return new GenericUser([
+        return new GenericUser(['password' => '', 
             'id' => 'user-1',
             'console_access_token' => 'platform-access-token',
             'console_organization_id' => 'org-1',
